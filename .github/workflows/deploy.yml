@@ -52,13 +52,13 @@ jobs:
           script: |
             cd /home/cj/web_services/vmq-api-go
 
-            docker compose down
+            # 【优化1】先拉取最新代码状态，不要无脑 down，减少服务真空期
+            # 直接强制无缓存构建最新的镜像！这是解决代码不更新的核心！
+            docker compose build --no-cache app
             
-            # 在服务器上基于最新的代码构建 ARM64 镜像
-            docker compose build app
+            # 【优化2】使用 up -d 会自动重建发生改变的容器，不需要先执行 down
+            # --force-recreate 确保即使配置看起来没变，也会销毁旧容器启用新镜像
+            docker compose up -d --force-recreate app
             
-            # 启动所有服务
-            docker compose up -d
-            
-            # 清理无用的虚悬镜像，防止服务器磁盘爆满
+            # 清理无用的虚悬镜像和停止的容器，释放磁盘空间
             docker image prune -f
