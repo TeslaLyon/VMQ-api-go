@@ -39,7 +39,7 @@ jobs:
           # 🚨 再次确认：这里绝对不能有 !./config.yaml
           # 我为了保险，把 config.yaml 明确写在了最前面强制包含
           source: "config.yaml,.,!./.git,!./postgres_data,!./valkey_data,!./logs,!./.env" 
-          target: "~/vmq-app"
+          target: "/home/cj/web_services/vmq-api-go"
 
       # 4. 执行重启
       - name: 在服务器上执行部署
