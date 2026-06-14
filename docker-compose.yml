@@ -15,6 +15,9 @@ services:
         condition: service_healthy
       valkey:
         condition: service_healthy
+    networks:
+      - default         # 必须加这个！保证 app 能访问下面同属于默认网络的 postgres 和 valkey
+      - global_gateway  # 接入外部公共网络，让 Caddy 能通过容器名连进来
 
   postgres:
     image: postgres:18-alpine
