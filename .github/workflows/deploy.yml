@@ -22,7 +22,7 @@ jobs:
           port: ${{ secrets.SERVER_PORT || 22 }}
           # 关键修改：增加 !./config.yaml 和 !./.env 防止本地配置污染服务器
           source: ".,!./.git,!./postgres_data,!./valkey_data,!./logs,!./config.yaml,!./.env" 
-          target: "/opt/vmq-app"
+          target: "/home/cj/web_services/vmq-api-go"
 
       - name: 在服务器上生成生产配置并部署
         uses: appleboy/ssh-action@v0.1.10
