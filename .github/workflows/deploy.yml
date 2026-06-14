@@ -35,6 +35,9 @@ jobs:
           envs: PROD_CONFIG_YAML 
           script: |
             cd /home/cj/web_services/vmq-api-go
+
+            # 现在系统认识这个变量了，可以正确写入多行内容
+            echo "$PROD_CONFIG_YAML" > config.yaml
             
             # 停止并移除旧的 Go 容器（数据库和缓存不受影响，除非它们也更新了）
             docker compose stop app
