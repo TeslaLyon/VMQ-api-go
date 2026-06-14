@@ -36,6 +36,9 @@ func InitDB() (*gorm.DB, error) {
 		dbLogLevel = logger.Info
 	}
 
+	// 假设你的配置存在 config.Mode 变量里
+	log.Printf("!!! [DEBUG] 准备连接数据库，当前读取到的 Mode 是: [%s] !!!\n", config.AppConfig.Server.Mode)
+
 	gormConfig := &gorm.Config{
 		Logger:                                   logger.Default.LogMode(dbLogLevel),
 		DisableForeignKeyConstraintWhenMigrating: true, // 禁用物理外键，推荐逻辑外键
