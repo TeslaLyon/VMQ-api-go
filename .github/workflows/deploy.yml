@@ -34,7 +34,7 @@ jobs:
           # 注意：需要把机密变量通过 env 传递给 ssh-action
           envs: PROD_CONFIG_YAML 
           script: |
-            cd /opt/vmq-app
+            cd /home/cj/web_services/vmq-api-go
             
             # 停止并移除旧的 Go 容器（数据库和缓存不受影响，除非它们也更新了）
             docker compose stop app
