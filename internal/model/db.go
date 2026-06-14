@@ -15,6 +15,9 @@ import (
 // DB 全局数据库连接对象
 var DB *gorm.DB
 
+// 1. 动态获取日志级别
+var dbLogLevel logger.LogLevel
+
 // TODO：业界标准做法是：本地用 AutoMigrate 快速迭代，线上配合 Atlas、Golang-migrate 或 GORM 官方的 GORM Atlas 迁移工具生成具体的 .sql 脚本进行精细化版本控制。
 
 // InitDB 初始化 PostgreSQL 18 数据库连接
@@ -25,8 +28,16 @@ func InitDB() (*gorm.DB, error) {
 		dbCfg.Host, dbCfg.Username, dbCfg.Password, dbCfg.Database, dbCfg.Port,
 	)
 
+	if config.AppConfig.Server.Mode == "release" {
+		// 生产环境：只记录 Error 级别的日志，关闭普通的 SQL 打印
+		dbLogLevel = logger.Error
+	} else {
+		// 开发/测试环境：记录所有 SQL（Info 级别），方便查问题
+		dbLogLevel = logger.Info
+	}
+
 	gormConfig := &gorm.Config{
-		Logger:                                   logger.Default.LogMode(logger.Info),
+		Logger:                                   logger.Default.LogMode(dbLogLevel),
 		DisableForeignKeyConstraintWhenMigrating: true, // 禁用物理外键，推荐逻辑外键
 	}
 
