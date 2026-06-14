@@ -1,0 +1,25 @@
+# Go 项目 .gitignore
+*.exe
+*.dll
+*.so
+*.dylib
+dist/
+bin/
+vendor/
+go.sum
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+postgres_data/
+tmp/
+valkey_data/
+uploads/
+.air.toml
+
+config.yaml
+config.prod.yaml
+
+.env
