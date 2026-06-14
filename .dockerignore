@@ -1,0 +1,16 @@
+# 忽略数据库和缓存数据
+postgres_data/
+valkey_data/
+
+# 忽略日志文件
+logs/
+
+# 忽略 Git 仓库数据
+.git/
+
+# 忽略本地环境变量（为了安全，通常环境变量通过 docker-compose 或 k8s 注入）
+.env
+
+# 忽略其他不必要的本地编译产物（可选）
+*.exe
+*.test
