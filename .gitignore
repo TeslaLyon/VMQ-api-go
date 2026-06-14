@@ -6,7 +6,6 @@
 dist/
 bin/
 vendor/
-go.sum
 
 # IDE
 .vscode/
