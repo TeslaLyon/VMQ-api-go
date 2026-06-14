@@ -58,7 +58,7 @@ func InitDB() (*gorm.DB, error) {
 	sqlDB.SetConnMaxLifetime(time.Hour * 1)
 
 	DB = db
-	log.Println("✅ 成功连接至 PostgreSQL 1888!")
+	log.Println("✅ 成功连接至 PostgreSQL 18!")
 
 	// ==========================================
 	// 🆕 核心：在此处执行自动迁移

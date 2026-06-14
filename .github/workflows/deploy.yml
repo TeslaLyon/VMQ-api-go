@@ -52,6 +52,6 @@ jobs:
           script_stop: true # 🚨 加上这一行！任何命令报错立马停止部署！
           script: |
             cd /home/cj/web_services/vmq-api-go
-            docker compose build --no-cache app
+            docker compose build app
             docker compose up -d --force-recreate app
             docker image prune -f
