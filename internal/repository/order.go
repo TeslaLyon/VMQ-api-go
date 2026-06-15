@@ -374,7 +374,7 @@ func (r *orderRepository) GetUserSetting(userID uint, key string) (*model.Settin
 
 func (r *orderRepository) GetUserPayUrl(userID uint, key string) (string, error) {
 	var name string
-	err := r.db.Model(&model.User{}).Where("id = ?", 1).Select("name").Scan(&name).Error
+	err := r.db.Model(&model.User{}).Where("id = ?", userID).Select(key).Scan(&name).Error
 	if err != nil {
 		return "", err
 	}

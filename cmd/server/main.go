@@ -24,6 +24,7 @@ import (
 // TODO：添加日志 手机监控端报错、失联的日志
 // TODO: 添加定时任务，监控最后一次心跳时间，超过一定时间未更新则认为失联，发送通知
 // TODO:仔细检查 type 1 微信；2 支付宝
+// TODO：登陆成功后依旧是 login 页面，然后手动访问首页是成功的
 func main() {
 	// 加载配置
 	if err := config.LoadConfig("."); err != nil {
