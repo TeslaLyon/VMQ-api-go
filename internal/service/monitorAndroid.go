@@ -91,15 +91,17 @@ func (s *monitorAndroidService) ProcessMonitorPush(req *model.MonitorPushRequest
 		}
 	}
 
+	price := int64(req.Price)
+
 	// 验证签名 - 适配Android端格式：md5(type + price + timestamp + key)
-	signStr := req.Type + strconv.FormatInt(req.Price, 10) + req.T + user.GetKey()
+	signStr := req.Type + strconv.FormatInt(price, 10) + req.T + user.GetKey()
 	expectedSign := fmt.Sprintf("%x", md5.Sum([]byte(signStr)))
 	if req.Sign != expectedSign {
 		return ErrInvalidSign
 	}
 
 	// 根据价格和类型查找对应的待支付订单
-	price := req.Price
+	
 	// if err != nil {
 	// 	return fmt.Errorf("invalid price: %s", req.Price)
 	// }

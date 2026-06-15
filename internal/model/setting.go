@@ -15,9 +15,9 @@ type MonitorHeartRequest struct {
 
 // MonitorPushRequest 监控推送请求
 type MonitorPushRequest struct {
-	T     string `form:"t" binding:"required"`
-	Sign  string `form:"sign" binding:"required"`
-	Type  string `form:"type" binding:"required"`
-	Price int64  `form:"price" binding:"required"`
-	AppID string `form:"appid"` // 可选，用于多用户系统
+	T     string  `form:"t" binding:"required"`
+	Sign  string  `form:"sign" binding:"required"`
+	Type  string  `form:"type" binding:"required"`
+	Price float64 `form:"price" binding:"required"`
+	AppID string  `form:"appid"` // 可选，用于多用户系统
 }
