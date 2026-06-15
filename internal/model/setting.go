@@ -18,6 +18,6 @@ type MonitorPushRequest struct {
 	T     string `form:"t" binding:"required"`
 	Sign  string `form:"sign" binding:"required"`
 	Type  string `form:"type" binding:"required"`
-	Price int64 `form:"price" binding:"required"`
+	Price int64  `form:"price" binding:"required"`
 	AppID string `form:"appid"` // 可选，用于多用户系统
 }
