@@ -108,7 +108,7 @@ func setupRoutes(monitorAndroidHandler *handler.MonitorAndroidHandler, qrcodeHan
 	router.Use(cors.Default())
 
 	router.GET("/appHeart", monitorAndroidHandler.MonitorHeart)
-	router.POST("/appHeart", monitorAndroidHandler.MonitorHeart)
+	router.Any("/appHeart", monitorAndroidHandler.MonitorHeart)
 
 	openAPI := router.Group("/openapi")
 	openAPI.Use(middleware.OpenAPIAuthMiddleware())
