@@ -128,13 +128,13 @@ func (o *Order) GetTypeText() string {
 
 // CreateOrderRequest 创建订单请求
 type CreateOrderRequest struct {
-	UserID     uint   `json:"user_id" binding:"required"`
-	Type       int    `json:"type" binding:"required,oneof=1 2"`
-	Price      int64  `json:"price" binding:"required,gt=0"`
-	Subject    string `json:"subject" binding:"required,max=200"`
-	Body       string `json:"body" binding:"omitempty,max=500"`
-	Notify_url string `json:"notify_url" binding:"omitempty,url,max=255"`
-	Return_url string `json:"return_url" binding:"omitempty,url,max=255"`
+	UserID     uint    `json:"user_id" binding:"required"`
+	Type       int     `json:"type" binding:"required,oneof=1 2"`
+	Price      float64 `json:"price" binding:"required,gt=0"`
+	Subject    string  `json:"subject" binding:"required,max=200"`
+	Body       string  `json:"body" binding:"omitempty,max=500"`
+	Notify_url string  `json:"notify_url" binding:"omitempty,url,max=255"`
+	Return_url string  `json:"return_url" binding:"omitempty,url,max=255"`
 }
 
 // UpdateOrderRequest 更新订单请求

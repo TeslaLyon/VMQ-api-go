@@ -156,7 +156,7 @@ func (s *orderService) CreateOrder(userID uint, req *model.CreateOrderRequest, c
 		return nil, ErrOrderExists
 	}
 
-	price := req.Price * 100 // 转换为分
+	price := int64(req.Price * 100) // 转换为分
 
 	// 创建订单 - 使用简化字段名
 	// 将Subject和Body存储在Param字段中（JSON格式）

@@ -16,7 +16,6 @@ import (
 	"VMQ-api-go/internal/repository"
 	"VMQ-api-go/internal/scheduler"
 	"VMQ-api-go/internal/service"
-	"VMQ-api-go/internal/utils"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -170,10 +169,10 @@ func setupRoutes(monitorAndroidHandler *handler.MonitorAndroidHandler, qrcodeHan
 		c.JSON(200, gin.H{"status": "UP", "time": time.Now().Format(time.RFC3339)})
 	})
 
-	router.GET("/test", func(ctx *gin.Context) {
-		randomPayPageSalt := utils.GenerateRandomString16Fast()
-		ctx.JSON(200, gin.H{"salt": randomPayPageSalt})
-	})
+	// router.GET("/test", func(ctx *gin.Context) {
+	// 	randomPayPageSalt := utils.GenerateRandomString16Fast()
+	// 	ctx.JSON(200, gin.H{"salt": randomPayPageSalt})
+	// })
 
 	return router
 }

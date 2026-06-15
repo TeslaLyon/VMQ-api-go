@@ -75,3 +75,38 @@ func (h *MonitorAndroidHandler) MonitorHeart(c *gin.Context) {
 		"msg":  "success",
 	})
 }
+
+func (h *MonitorAndroidHandler) MonitorPush(c *gin.Context) {
+	var req model.MonitorPushRequest
+	if err := c.ShouldBind(&req); err != nil {
+		// response.ValidationFailed(c, err.Error())
+		c.JSON(200, gin.H{
+			"code": -1,
+			"msg":  "Missing required parameters",
+		})
+		return
+	}
+
+	err := h.monitorAndroidService.ProcessMonitorPush(&req)
+	if err != nil {
+		if err == service.ErrInvalidSign {
+			// response.Error(c, response.CodeUnauthorized, "Invalid signature")
+			c.JSON(200, gin.H{
+				"code": -1,
+				"msg":  "Invalid signature",
+			})
+			return
+		}
+		// response.InternalError(c, "Failed to process monitor push")
+		c.JSON(200, gin.H{
+			"code": -1,
+			"msg":  "Failed to process monitor push",
+		})
+		return
+	}
+
+	c.JSON(200, gin.H{
+		"code": 1,
+		"msg":  "success",
+	})
+}
