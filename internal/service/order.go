@@ -513,10 +513,14 @@ func (s *orderService) generatePayURL(userID uint, orderType int, price int64) s
 		settingKey = "wxpay" // 微信
 	}
 
-	setting, err := s.orderRepo.GetUserSetting(userID, settingKey)
-	if err == nil && setting.Vvalue != "" {
-		return setting.Vvalue
+	payUrl, err := s.orderRepo.GetUserPayUrl(userID, settingKey)
+	if err == nil && payUrl != "" {
+		return payUrl
 	}
+	// setting, err := s.orderRepo.GetUserSetting(userID, settingKey)
+	// if err == nil && setting.Vvalue != "" {
+	// 	return setting.Vvalue
+	// }
 
 	// 3. 如果都没有找到，返回测试用的URL
 	var paymentMethod string

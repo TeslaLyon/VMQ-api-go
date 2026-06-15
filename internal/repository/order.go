@@ -38,6 +38,7 @@ type OrderRepository interface {
 	GetOrderStatsByDateRange(userID uint, startTime, endTime int64) (*model.OrderStats, error)
 	GenerateUniquePrice(targetPrice int64, payType int, oid string) int64
 	CloseExpiredOrdersForCronJob() (int64, error) // 新增：为定时任务专用的关闭过期订单方法
+	GetUserPayUrl(userID uint, key string) (string, error)
 }
 
 // orderRepository 订单仓库实现
@@ -369,6 +370,15 @@ func (r *orderRepository) GetUserSetting(userID uint, key string) (*model.Settin
 		return nil, err
 	}
 	return &setting, nil
+}
+
+func (r *orderRepository) GetUserPayUrl(userID uint, key string) (string, error) {
+	var name string
+	err := r.db.Model(&model.User{}).Where("id = ?", 1).Select("name").Scan(&name).Error
+	if err != nil {
+		return "", err
+	}
+	return name, nil
 }
 
 // GetOrderStatsByDateRange 获取指定时间范围内的订单统计
