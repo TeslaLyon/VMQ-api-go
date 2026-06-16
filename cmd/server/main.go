@@ -51,8 +51,9 @@ func main() {
 	userRepo := repository.NewUserRepository(db)
 	orderRepo := repository.NewOrderRepository(db)
 	qrcodeRepo := repository.NewQrcodeRepository(db)
+	tmpPriceRepo := repository.NewTmpPriceRepository(db)
 
-	monitorAndroidService := service.NewMonitorAndroidService(userRepo, orderRepo)
+	monitorAndroidService := service.NewMonitorAndroidService(userRepo, orderRepo, tmpPriceRepo)
 	monitorAndroidHandler := handler.NewMonitorAndroidHandler(monitorAndroidService)
 
 	userService := service.NewUserService(userRepo)
