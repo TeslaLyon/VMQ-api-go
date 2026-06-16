@@ -101,16 +101,16 @@ func (s *monitorAndroidService) ProcessMonitorPush(req *model.MonitorPushRequest
 
 	// 验证签名 - 适配Android端格式：md5(type + price + timestamp + key)
 	signStr := strType + strPrice + req.T + user.GetKey()
-	log.Printf("type: %s", strType)
-	log.Printf("strPrice: %s", strPrice)
-	log.Printf("price: %d", price)
-	log.Printf("timestamp: %s", req.T)
-	log.Printf("key: %s", user.GetKey())
-	log.Printf("签名字符串: %s", signStr)
+	// log.Printf("type: %s", strType)
+	// log.Printf("strPrice: %s", strPrice)
+	// log.Printf("price: %d", price)
+	// log.Printf("timestamp: %s", req.T)
+	// log.Printf("key: %s", user.GetKey())
+	// log.Printf("签名字符串: %s", signStr)
 	// expectedSign := fmt.Sprintf("%x", md5.Sum([]byte(signStr)))
 	hash := md5.Sum([]byte(signStr))
 	expectedSign := hex.EncodeToString(hash[:])
-	log.Printf("expectedSign: %s", expectedSign)
+	// log.Printf("expectedSign: %s", expectedSign)
 	if req.Sign != expectedSign {
 		return ErrInvalidSign
 	}
@@ -140,7 +140,7 @@ func (s *monitorAndroidService) ProcessMonitorPush(req *model.MonitorPushRequest
 		if err != nil {
 			log.Printf("更新订单状态失败: 订单ID=%s, 错误=%v", order.Order_id, err)
 		} else {
-			s.tmpPriceRepo.Delete(order.Order_id)
+			s.tmpPriceRepo.DeleteWithOID(order.Order_id)
 			log.Printf("订单支付成功: 订单ID=%s, 用户ID=%d, 价格=%d", order.Order_id, user.ID, price)
 		}
 	}

@@ -7,7 +7,7 @@ import (
 )
 
 type TmpPriceRepository interface {
-	Delete(oid string) error
+	DeleteWithOID(oid string) error
 }
 
 type tmpPriceRepository struct {
@@ -18,6 +18,6 @@ func NewTmpPriceRepository(db *gorm.DB) TmpPriceRepository {
 	return &tmpPriceRepository{db: db}
 }
 
-func (r *tmpPriceRepository) Delete(oid string) error {
-	return r.db.Delete(&model.TmpPrice{}, oid).Error
+func (r *tmpPriceRepository) DeleteWithOID(oid string) error {
+	return r.db.Where("oid = ?", oid).Delete(&model.TmpPrice{}).Error
 }
