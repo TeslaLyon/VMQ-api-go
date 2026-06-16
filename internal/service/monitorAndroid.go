@@ -4,6 +4,7 @@ import (
 	"VMQ-api-go/internal/model"
 	"VMQ-api-go/internal/repository"
 	"crypto/md5"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"log"
@@ -93,20 +94,32 @@ func (s *monitorAndroidService) ProcessMonitorPush(req *model.MonitorPushRequest
 
 	price := int64(req.Price)
 
+	strType := strconv.FormatInt(req.Type, 10)
+	strPrice := fmt.Sprintf("%.2f", req.Price)
+
 	// 验证签名 - 适配Android端格式：md5(type + price + timestamp + key)
-	signStr := req.Type + strconv.FormatInt(price, 10) + req.T + user.GetKey()
-	expectedSign := fmt.Sprintf("%x", md5.Sum([]byte(signStr)))
+	signStr := strType + strPrice + req.T + user.GetKey()
+	log.Printf("type: %s", strType)
+	log.Printf("strPrice: %s", strPrice)
+	log.Printf("price: %d", price)
+	log.Printf("timestamp: %s", req.T)
+	log.Printf("key: %s", user.GetKey())
+	log.Printf("签名字符串: %s", signStr)
+	// expectedSign := fmt.Sprintf("%x", md5.Sum([]byte(signStr)))
+	hash := md5.Sum([]byte(signStr))
+	expectedSign := hex.EncodeToString(hash[:])
+	log.Printf("expectedSign: %s", expectedSign)
 	if req.Sign != expectedSign {
 		return ErrInvalidSign
 	}
 
 	// 根据价格和类型查找对应的待支付订单
-	
+
 	// if err != nil {
 	// 	return fmt.Errorf("invalid price: %s", req.Price)
 	// }
 
-	orderType, err := strconv.Atoi(req.Type)
+	orderType, err := strconv.Atoi(strType)
 	if err != nil {
 		return fmt.Errorf("invalid type: %s", req.Type)
 	}

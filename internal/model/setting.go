@@ -17,7 +17,7 @@ type MonitorHeartRequest struct {
 type MonitorPushRequest struct {
 	T     string  `form:"t" binding:"required"`
 	Sign  string  `form:"sign" binding:"required"`
-	Type  string  `form:"type" binding:"required"`
+	Type  int64   `form:"type" binding:"required"`
 	Price float64 `form:"price" binding:"required"`
 	AppID string  `form:"appid"` // 可选，用于多用户系统
 }

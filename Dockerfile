@@ -1,36 +1,28 @@
-# 阶段 1: 构建阶段
-FROM golang:1.26.3-alpine AS builder
+# 使用官方推荐的最新稳定版轻量级 Alpine 镜像
+FROM alpine:3.20
 
-# 设置环境变量，启用 Go Modules，禁用 CGO 以确保静态编译，并指定 ARM64 架构
-ENV GO111MODULE=on \
-    CGO_ENABLED=0 \
-    GOOS=linux \
-    GOARCH=arm64
+# 1. 严谨性增强：一次性安装时区数据与 HTTPS 根证书（防止请求外部 HTTPS 接口失败）
+# 同时清理 apk 缓存，确保镜像体积绝对最小化
+RUN apk add --no-cache tzdata ca-certificates && \
+    cp /usr/share/zoneinfo/Asia/Shanghai /etc/localtime && \
+    echo "Asia/Shanghai" > /etc/timezone
 
-WORKDIR /build
-
-# 缓存依赖 (利用 Docker 层缓存加速构建)
-COPY go.mod go.sum ./
-RUN go mod download
-
-# 复制代码并构建 (注意构建路径指向了 cmd/server)
-COPY . .
-RUN go build -o /build/main ./cmd/server
-
-# 阶段 2: 运行阶段
-FROM alpine:latest
+# 2. 安全性增强：创建独立的非 root 运行用户，并限制其权限
+# 赋予其 10001 UID，无家目录，禁止 shell 登录
+RUN adduser -D -g "" -u 10001 appuser
 
 WORKDIR /app
 
-# 设置时区
-RUN apk add --no-cache tzdata
-ENV TZ=Asia/Shanghai
+# 3. 从 GitHub Actions 传输过来的上下文中，复制预编译好的 ARM64 二进制文件
+# 并在复制的同时，直接将所有权移交给非 root 用户
+COPY --chown=appuser:appuser vmq-app /app/main
+COPY --chown=appuser:appuser config.yaml /app/config.yaml
 
-# 从构建阶段复制编译好的二进制文件
-COPY --from=builder /build/main /app/main
+# 4. 切换到非 root 用户身份运行后续指令
+USER appuser
 
-# 暴露端口
+# 暴露服务端口
 EXPOSE 8081
 
-# 启动命令
+# 5. 启动程序（确保二进制文件具有可执行权限）
 CMD ["./main"]

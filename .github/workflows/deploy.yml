@@ -1,57 +1,71 @@
-name: Deploy VMQ App to ARM64 Server
+name: Deploy VMQ App to ARM64 Server (Pre-compiled)
 
 on:
   push:
     branches:
-      - main # 当推送到 main 分支时触发
+      - main 
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
 
     steps:
-      - name: 检出代码
+      - name: 1. 检出代码
         uses: actions/checkout@v4
 
-      # 1. 使用 EOF 语法安全写入，防止密码中的 $ 和 " 破坏脚本
-      - name: 生成生产环境 config.yaml
+      # --- 新增：设置 Go 环境与交叉编译 ---
+      - name: 2. 设置 Go 环境
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22' # ⚠️ 请修改为你项目实际使用的 Go 版本
+          cache: true
+
+      - name: 3. 交叉编译 Go 项目为 ARM64 架构
+        run: |
+          # 关闭 CGO 并指定目标系统为 linux，架构为 arm64
+          # -ldflags="-s -w" 用于去掉符号表和调试信息，大幅减小二进制文件体积
+          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" -o vmq-app .
+
+      # -----------------------------------
+
+      - name: 4. 生成生产环境 config.yaml
         run: |
           cat << 'EOF' > config.yaml
           ${{ secrets.PROD_CONFIG_YAML }}
           EOF
 
-      # 2. 排错探针：打印生成的文件大小和行数（绝不会在日志中泄露密码内容）
-      - name: 检查生成状态
+      - name: 5. 检查生成状态 (排错探针)
         run: |
-          echo "文件大小："
-          ls -lh config.yaml
-          echo "文件行数："
-          wc -l config.yaml
+          echo "查看编译出的二进制文件和配置："
+          ls -lh config.yaml vmq-app
 
-      # 3. 传输代码
-      - name: 通过 SCP 传输代码到服务器
+      - name: 6. 通过 SCP 传输【编译产物】到服务器
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USERNAME }}
           key: ${{ secrets.SERVER_SSH_KEY }}
           port: ${{ secrets.SERVER_PORT || 22 }}
-          # 🚨 再次确认：这里绝对不能有 !./config.yaml
-          # 我为了保险，把 config.yaml 明确写在了最前面强制包含
-          source: "config.yaml,.,!./.git,!./postgres_data,!./valkey_data,!./logs,!./.env" 
+          # 🚨 核心改变：只传编译好的程序、配置和部署所需的容器文件
+          # 如果你的项目还有前端静态资源(如 public/ 目录)，请追加在这里
+          source: "vmq-app,config.yaml,docker-compose.yml,Dockerfile" 
           target: "/home/cj/web_services/vmq-api-go"
+          overwrite: true
 
-      # 4. 执行重启
-      - name: 在服务器上执行部署
+      - name: 7. 在服务器上执行部署
         uses: appleboy/ssh-action@v0.1.10
         with:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USERNAME }}
           key: ${{ secrets.SERVER_SSH_KEY }}
           port: ${{ secrets.SERVER_PORT || 22 }}
-          script_stop: true # 🚨 加上这一行！任何命令报错立马停止部署！
+          script_stop: true 
           script: |
             cd /home/cj/web_services/vmq-api-go
+            # 给上传的二进制文件赋予执行权限，防止 Linux 拦截
+            chmod +x vmq-app
+            
+            # 此时的 build 只是将二进制文件装进镜像，瞬间完成，不消耗服务器算力
             docker compose build app
             docker compose up -d --force-recreate app
             docker image prune -f
