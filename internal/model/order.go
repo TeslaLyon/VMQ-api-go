@@ -203,6 +203,7 @@ type OrderResponse struct {
 	Create_date  int64  `json:"create_date"`
 	Pay_date     int64  `json:"pay_date"`
 	Close_date   int64  `json:"close_date"`
+	Expire_at    int64  `json:"expire_at"`
 	// User         *User   `json:"user,omitempty"`
 }
 
@@ -227,6 +228,7 @@ func (o *Order) ToResponse() *OrderResponse {
 		Create_date:  o.Create_date,
 		Pay_date:     o.Pay_date,
 		Close_date:   o.Close_date,
+		Expire_at:    o.ExpireAt,
 	}
 
 	// if o.User != nil {

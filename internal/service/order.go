@@ -16,13 +16,14 @@ import (
 
 // 订单相关错误
 var (
-	ErrOrderNotFound    = errors.New("order not found")
-	ErrOrderExists      = errors.New("order already exists")
-	ErrOrderExpired     = errors.New("order expired")
-	ErrOrderPaid        = errors.New("order already paid")
-	ErrOrderClosed      = errors.New("order closed")
-	ErrInvalidAmount    = errors.New("invalid amount")
-	ErrInvalidOrderType = errors.New("invalid order type")
+	ErrOrderNotFound       = errors.New("order not found")
+	ErrOrderExists         = errors.New("order already exists")
+	ErrOrderExpired        = errors.New("order expired")
+	ErrOrderPaid           = errors.New("order already paid")
+	ErrOrderClosed         = errors.New("order closed")
+	ErrInvalidAmount       = errors.New("invalid amount")
+	ErrInvalidReallyAmount = errors.New("invalid really amount")
+	ErrInvalidOrderType    = errors.New("invalid order type")
 )
 
 // OrderService 订单服务接口
@@ -158,6 +159,11 @@ func (s *orderService) CreateOrder(userID uint, req *model.CreateOrderRequest, c
 
 	price := int64(req.Price * 100) // 转换为分
 
+	reallyPrice := s.generateReallyPrice(price, req.Type, orderID) // 计算实际支付金额
+	if reallyPrice <= 0 {
+		return nil, ErrInvalidReallyAmount
+		// TODO: 后期想改成调用其他用户 id 的收款码，到时候就不传递 user_id 了，自动读取金额最高的
+	}
 	// 创建订单 - 使用简化字段名
 	// 将Subject和Body存储在Param字段中（JSON格式）
 	paramData := map[string]string{
@@ -168,13 +174,11 @@ func (s *orderService) CreateOrder(userID uint, req *model.CreateOrderRequest, c
 
 	// 生成商户订单号（Pay_id）
 	payID := s.generatePayID(userID, typeStr)
-
+	// TODO:研究这个号有什么用？CreateOrder接口是公开的，商户订单号应该由调用方提供，还是由我们生成？如果由我们生成，调用方怎么知道这个商户订单号是什么？目前先保持和PHP版本一致，由我们生成，并返回给调用方。后续可以考虑改为由调用方提供，或者提供一个单独的接口来生成商户订单号。
 	// 设置支付URL（Pay_url）- 与PHP版本逻辑一致
 	payURL := s.generatePayURL(userID, req.Type, price)
 
 	expireAt := s.generateExpireAt(userID) // 订单过期时间（分钟）
-
-	reallyPrice := s.generateReallyPrice(price, req.Type, orderID) // 计算实际支付金额
 
 	order := &model.Order{
 		Order_id:     orderID,
