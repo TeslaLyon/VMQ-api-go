@@ -20,9 +20,10 @@ type MonitorAndroidService interface {
 }
 
 type monitorAndroidService struct {
-	userRepo  repository.UserRepository //TODO 研究这样写的目的 userRepo是否可以替换为UserService接口，解耦服务层和仓储层
-	orderRepo repository.OrderRepository
-	startTime time.Time
+	userRepo     repository.UserRepository //TODO 研究这样写的目的 userRepo是否可以替换为UserService接口，解耦服务层和仓储层
+	orderRepo    repository.OrderRepository
+	tmpPriceRepo repository.TmpPriceRepository
+	startTime    time.Time
 }
 
 var (
@@ -30,11 +31,12 @@ var (
 	ErrInvalidSign     = errors.New("invalid signature")
 )
 
-func NewMonitorAndroidService(userRepo repository.UserRepository, orderRepo repository.OrderRepository) MonitorAndroidService {
+func NewMonitorAndroidService(userRepo repository.UserRepository, orderRepo repository.OrderRepository, tmpPriceRepo repository.TmpPriceRepository) MonitorAndroidService {
 	return &monitorAndroidService{
-		userRepo:  userRepo,
-		orderRepo: orderRepo,
-		startTime: time.Now(),
+		userRepo:     userRepo,
+		orderRepo:    orderRepo,
+		tmpPriceRepo: tmpPriceRepo,
+		startTime:    time.Now(),
 	}
 }
 
@@ -92,7 +94,7 @@ func (s *monitorAndroidService) ProcessMonitorPush(req *model.MonitorPushRequest
 		}
 	}
 
-	price := int64(req.Price)
+	price := int64(req.Price * 100)
 
 	strType := strconv.FormatInt(req.Type, 10)
 	strPrice := fmt.Sprintf("%.2f", req.Price)
@@ -121,7 +123,7 @@ func (s *monitorAndroidService) ProcessMonitorPush(req *model.MonitorPushRequest
 
 	orderType, err := strconv.Atoi(strType)
 	if err != nil {
-		return fmt.Errorf("invalid type: %s", req.Type)
+		return fmt.Errorf("invalid type: %s", strType)
 	}
 
 	// 查找该用户最近创建的匹配订单
@@ -133,11 +135,12 @@ func (s *monitorAndroidService) ProcessMonitorPush(req *model.MonitorPushRequest
 		// 更新订单状态为已支付
 		order.State = model.OrderStatusPaid
 		order.Pay_date = time.Now().Unix()
-
+		// TODO:即使没有对应金额、state 为 0 的订单也返回success 是否是正确的？
 		err = s.orderRepo.Update(order)
 		if err != nil {
 			log.Printf("更新订单状态失败: 订单ID=%s, 错误=%v", order.Order_id, err)
 		} else {
+			s.tmpPriceRepo.Delete(order.Order_id)
 			log.Printf("订单支付成功: 订单ID=%s, 用户ID=%d, 价格=%d", order.Order_id, user.ID, price)
 		}
 	}

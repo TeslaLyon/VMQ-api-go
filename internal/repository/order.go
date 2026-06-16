@@ -500,7 +500,6 @@ func (r *orderRepository) GetUsersWithPendingOrders() ([]uint, error) {
 // GetRecentPendingOrderByPriceAndType 根据价格和类型获取最近的待支付订单
 func (r *orderRepository) GetRecentPendingOrderByPriceAndType(userID uint, price int64, orderType int) (*model.Order, error) {
 	var order model.Order
-	price = price * 100 // 将价格转换为分单位，确保与数据库中的价格格式一致
 	// 先尝试匹配 really_price（实际支付金额）
 	err := r.db.Where("user_id = ? AND really_price = ? AND type = ? AND state = ?",
 		userID, price, orderType, model.OrderStatusPending).
