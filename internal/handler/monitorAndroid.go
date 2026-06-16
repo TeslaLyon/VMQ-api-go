@@ -100,8 +100,8 @@ func (h *MonitorAndroidHandler) MonitorPush(c *gin.Context) {
 		// response.InternalError(c, "Failed to process monitor push")
 		c.JSON(200, gin.H{
 			"code": -1,
-			// "msg":  "Failed to process monitor push",
-			"msg": err.Error(),
+			"msg":  "Failed to process monitor push",
+			// "msg": err.Error(),
 		})
 		return
 	}

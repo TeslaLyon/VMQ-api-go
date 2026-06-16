@@ -159,7 +159,7 @@ func setupRoutes(monitorAndroidHandler *handler.MonitorAndroidHandler, qrcodeHan
 			auth.POST("/login/outLogin", handler.Logout)
 
 			// 订单
-
+			auth.GET("/orders", orderHandler.GetOrders)        // 订单详情查询，支持 query 参数 ?type=1 或 ?type=2
 			auth.POST("/close-expired", orderHandler.CloseExpiredOrders)   // 关闭过期订单
 			auth.POST("/delete-expired", orderHandler.DeleteExpiredOrders) // 删除过期订单
 			// 示例：用户管理相关 (你可以后续在这里扩展)

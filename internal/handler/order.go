@@ -1,9 +1,9 @@
 package handler
 
 import (
+	"log"
 	"strconv"
 	"time"
-	"log"
 
 	"VMQ-api-go/internal/middleware"
 	"VMQ-api-go/internal/model"
