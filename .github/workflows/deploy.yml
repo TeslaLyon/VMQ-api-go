@@ -22,9 +22,8 @@ jobs:
 
       - name: 3. 交叉编译 Go 项目为 ARM64 架构
         run: |
-          # 关闭 CGO 并指定目标系统为 linux，架构为 arm64
-          # -ldflags="-s -w" 用于去掉符号表和调试信息，大幅减小二进制文件体积
-          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" -o vmq-app .
+          # 请把 ./cmd/main.go 替换为你实际 main.go 所在的相对路径！
+          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" -o vmq-app ./cmd/server/main.go
 
       # -----------------------------------
 
