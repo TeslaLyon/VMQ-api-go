@@ -60,7 +60,7 @@ func main() {
 	qrcodeService := service.NewQrcodeService(qrcodeRepo)
 	qrcodeHandler := handler.NewQrcodeHandler(qrcodeService)
 
-	orderService := service.NewOrderService(orderRepo, userRepo)
+	orderService := service.NewOrderService(orderRepo, userRepo, tmpPriceRepo)
 	orderHandler := handler.NewOrderHandler(orderService, monitorAndroidService, userService)
 
 	// 初始化定时任务调度器

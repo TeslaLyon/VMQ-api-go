@@ -49,13 +49,15 @@ type OrderService interface {
 type orderService struct {
 	orderRepo repository.OrderRepository
 	userRepo  repository.UserRepository
+	tmpPriceRepo repository.TmpPriceRepository
 }
 
 // NewOrderService 创建订单服务
-func NewOrderService(orderRepo repository.OrderRepository, userRepo repository.UserRepository) OrderService {
+func NewOrderService(orderRepo repository.OrderRepository, userRepo repository.UserRepository, tmpPriceRepo repository.TmpPriceRepository) OrderService {
 	return &orderService{
 		orderRepo: orderRepo,
 		userRepo:  userRepo,
+		tmpPriceRepo: tmpPriceRepo,
 	}
 }
 
@@ -105,6 +107,10 @@ func (s *orderService) GetOrderStatus(orderID string) (*model.OrderStatusRespons
 		orderState = -1
 		remainingSeconds = 0
 		s.CloseOrder(order.Id)
+		delete_err := s.tmpPriceRepo.DeleteWithOID(order.Order_id)
+			if delete_err != nil {
+				log.Printf("GetOrderStatus 删除临时价格数据失败: 订单ID=%s, 错误=%v", order.Order_id, delete_err)
+			}
 		log.Printf("订单已关闭：订单【状态】查询接口时检测到剩余时间不足 10 秒，订单ID：%s", order.Order_id)
 	}
 
