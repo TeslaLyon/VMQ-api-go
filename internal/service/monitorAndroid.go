@@ -1,6 +1,7 @@
 package service
 
 import (
+	"VMQ-api-go/internal/config"
 	"VMQ-api-go/internal/model"
 	"VMQ-api-go/internal/repository"
 	"crypto/hmac" // 🌟 用于 HMAC 运算
@@ -197,7 +198,7 @@ func (s *monitorAndroidService) ProcessMonitorPush(req *model.MonitorPushRequest
 				} else {
 					log.Printf("[异步回调未确认] 订单ID=%s, HTTP=%d, Body=%s", orderID, resp.StatusCode, responseContent)
 				}
-			}(finalNotifyURL, order.Order_id, user.GetAppId(), user.GetKey()) // 🌟 传入凭据
+			}(finalNotifyURL, order.Order_id, config.AppConfig.Server.OpenapiKey, config.AppConfig.Server.OpenapiValue) // 🌟 传入凭据
 			log.Printf("订单支付成功: 订单ID=%s, 用户ID=%d, 价格=%d", order.Order_id, user.ID, price)
 		}
 	}
@@ -206,6 +207,14 @@ func (s *monitorAndroidService) ProcessMonitorPush(req *model.MonitorPushRequest
 	now := time.Now().Unix()
 	user.Lastpay = &now
 	return s.userRepo.Update(user)
+}
+
+func getAppSecretByKey(appKey string) string {
+	if appKey == config.AppConfig.Server.OpenapiKey {
+		// 匹配成功，返回配置中的 openapi_value
+		return config.AppConfig.Server.OpenapiValue
+	}
+	return ""
 }
 
 // CheckAndUpdateMonitorStatus 检查并更新所有用户的监控端状态
