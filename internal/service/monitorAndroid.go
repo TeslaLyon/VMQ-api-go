@@ -3,12 +3,19 @@ package service
 import (
 	"VMQ-api-go/internal/model"
 	"VMQ-api-go/internal/repository"
+	"crypto/hmac" // 🌟 用于 HMAC 运算
 	"crypto/md5"
+	cryptoRand "crypto/rand" // 🌟 用于生成安全的随机 Nonce
+	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"log"
+	"net/http"
+	"net/url"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -144,6 +151,53 @@ func (s *monitorAndroidService) ProcessMonitorPush(req *model.MonitorPushRequest
 			if delete_err != nil {
 				log.Printf("ProcessMonitorPush删除临时价格数据失败: 订单ID=%s, 错误=%v", order.Order_id, delete_err)
 			}
+			notifyUrl := order.Notify_url
+			parsedURL, _ := url.Parse(notifyUrl)
+			query := parsedURL.Query()
+			query.Set("order_id", fmt.Sprint(order.Order_id))
+			query.Set("type", fmt.Sprint(order.Type))
+			query.Set("price", fmt.Sprint(order.Price))
+			query.Set("reallyPrice", fmt.Sprint(order.Really_price))
+			parsedURL.RawQuery = query.Encode()
+			finalNotifyURL := parsedURL.String()
+			log.Printf("订单支付成功: 订单ID=%s, 用户ID=%d, 价格=%d，准备回调商户: %s", order.Order_id, user.ID, price, finalNotifyURL)
+
+			// 🌟 核心：使用独立 Goroutine 异步向商户发送回调通知，避免阻塞监控端请求
+			// 异步发起通知
+			go func(targetURL string, orderID string, appKey string, appSecret string) {
+				client := &http.Client{Timeout: 5 * time.Second}
+				req, reqErr := http.NewRequest(http.MethodGet, targetURL, nil)
+				if reqErr != nil {
+					log.Printf("[异步回调异常] 订单ID=%s, 创建请求失败: %v", orderID, reqErr)
+					return
+				}
+
+				// 基础环境标识
+				req.Header.Set("User-Agent", "VMQ-Monitor-Notifier/1.0")
+
+				// 🌟 核心：计算并批量装配认证 Header
+				headers := buildSignedHeaders(appKey, appSecret)
+				for k, v := range headers {
+					req.Header.Set(k, v)
+				}
+
+				// 发起请求
+				resp, doErr := client.Do(req)
+				if doErr != nil {
+					log.Printf("[异步回调失败] 订单ID=%s, 请求错误: %v", orderID, doErr)
+					return
+				}
+				defer resp.Body.Close()
+
+				bodyBytes, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
+				responseContent := strings.TrimSpace(string(bodyBytes))
+
+				if resp.StatusCode == http.StatusOK && strings.EqualFold(responseContent, "success") {
+					log.Printf("[异步回调成功] 订单ID=%s, 商户返回 success", orderID)
+				} else {
+					log.Printf("[异步回调未确认] 订单ID=%s, HTTP=%d, Body=%s", orderID, resp.StatusCode, responseContent)
+				}
+			}(finalNotifyURL, order.Order_id, user.GetAppId(), user.GetKey()) // 🌟 传入凭据
 			log.Printf("订单支付成功: 订单ID=%s, 用户ID=%d, 价格=%d", order.Order_id, user.ID, price)
 		}
 	}
@@ -197,4 +251,41 @@ func (s *monitorAndroidService) CheckAndUpdateMonitorStatus() error {
 	}
 
 	return nil
+}
+
+const nonceChars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+
+// generateRandomNonce 生成指定长度的高熵随机字符串 (对标 Laravel 的 Str::random)
+func generateRandomNonce(length int) string {
+	bytes := make([]byte, length)
+	if _, err := cryptoRand.Read(bytes); err != nil {
+		// 极端保底：降级为时间戳随机
+		return fmt.Sprintf("%016x", time.Now().UnixNano())[:length]
+	}
+	for i, b := range bytes {
+		bytes[i] = nonceChars[int(b)%len(nonceChars)]
+	}
+	return string(bytes)
+}
+
+// buildSignedHeaders 构造带有 HMAC-SHA256 签名的 Header 映射
+func buildSignedHeaders(appKey, appSecret string) map[string]string {
+	// 1. 10 位秒级时间戳与 16 位随机 Nonce
+	timestamp := strconv.FormatInt(time.Now().Unix(), 10)
+	nonce := generateRandomNonce(16)
+
+	// 2. 拼接载荷：AppKey + Timestamp + Nonce
+	signPayload := appKey + timestamp + nonce
+
+	// 3. HMAC-SHA256 签名计算并转为十六进制小写
+	h := hmac.New(sha256.New, []byte(appSecret))
+	h.Write([]byte(signPayload))
+	signature := hex.EncodeToString(h.Sum(nil))
+
+	return map[string]string{
+		"X-App-Key":   appKey,
+		"X-Timestamp": timestamp,
+		"X-Nonce":     nonce,
+		"X-Signature": signature,
+	}
 }
