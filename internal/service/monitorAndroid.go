@@ -140,7 +140,10 @@ func (s *monitorAndroidService) ProcessMonitorPush(req *model.MonitorPushRequest
 		if err != nil {
 			log.Printf("更新订单状态失败: 订单ID=%s, 错误=%v", order.Order_id, err)
 		} else {
-			s.tmpPriceRepo.DeleteWithOID(order.Order_id)
+			delete_err := s.tmpPriceRepo.DeleteWithOID(order.Order_id)
+			if delete_err != nil {
+				log.Printf("删除临时价格数据失败: 订单ID=%s, 错误=%v", order.Order_id, delete_err)
+			}
 			log.Printf("订单支付成功: 订单ID=%s, 用户ID=%d, 价格=%d", order.Order_id, user.ID, price)
 		}
 	}
