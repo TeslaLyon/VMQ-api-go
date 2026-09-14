@@ -520,67 +520,67 @@ func (r *orderRepository) GetRecentPendingOrderByPriceAndType(userID uint, price
 	return &order, nil
 }
 
-// GenerateUniquePrice 生成唯一的收款金额 (优先取高价)
-// targetPrice: 目标价格（单位：分，例如输入 500 代表 5.00 元）
+// GenerateUniquePrice 生成唯一的收款金额 (优先取原价，冲突时向上递增微调)
+// targetPrice: 目标标价（单位：分，例如输入 500 代表 5.00 元）
 // payType: 支付类型（1=微信, 2=支付宝）
+// oid: 绑定的订单唯一编号
 func (r *orderRepository) GenerateUniquePrice(targetPrice int64, payType int, oid string) int64 {
-	// 1. 确定需要浮动的金额区间。
-	// 根据需求修改十位和个位（即分和角）。我们允许向下浮动 99 分（近1元）。
-	// 查找范围是 (targetPrice-100, targetPrice]，例如目标 5.00 元，范围是 4.01 ~ 5.00
-	minPrice := targetPrice - 100
+	// 1. 确定向上浮动的金额区间。
+	// 允许向上浮动 99 分（即十位和个位发生微调，例如目标 5.00 元，尝试范围是 5.00 ~ 5.99 元）
+	// 共包含 100 个候选槽位
+	const maxOffset = 99
+	maxPrice := targetPrice + maxOffset
 
-	// 2. 仅查询出该区间内、该支付方式下，目前已经被占用的价格列表
-	// 💡 最佳实践：使用 Pluck 只提取 price 一列，极大降低内存占用和网络传输
+	// 2. 仅查询出该区间内、该支付方式下当前已被占用的价格列表
+	// 使用 Pluck 只提取 price 一列，保证内存与传输的高效性
 	var existingPrices []int64
 	err := r.db.Model(&model.TmpPrice{}).
-		Where("type = ? AND price > ? AND price <= ?", payType, minPrice, targetPrice).
+		Where("type = ? AND price >= ? AND price <= ?", payType, targetPrice, maxPrice).
 		Pluck("price", &existingPrices).Error
 
 	if err != nil {
 		return 0
 	}
 
-	// 3. 将数据库中查到的已存在价格存入 Map，以实现 O(1) 的极速查找
-	priceMap := make(map[int64]bool)
+	// 3. 将数据库中已存在的价格存入 Map，实现 O(1) 复杂度的本地快速比对
+	priceMap := make(map[int64]bool, len(existingPrices))
 	for _, p := range existingPrices {
 		priceMap[p] = true
 	}
 
-	// 4. 根据“优先价格高”的原则，从 targetPrice 开始向下倒序遍历
-	// 比如目标 500，循环顺序为：500, 499, 498... 直到 401
-	// 2. 倒序查找并尝试执行 Insert (数据库唯一索引做第二层拦截)
-	for p := targetPrice; p > minPrice; p-- {
-		// 如果内存 Map 中显示已被占用，直接跳过，不用麻烦数据库
+	// 4. 正序递增遍历：优先尝试 targetPrice（原价），若占用则逐步 +1 分向上排查
+	// 循环顺序依次为：500, 501, 502... 直到 599
+	for p := targetPrice; p <= maxPrice; p++ {
+		// 第一层防护：若内存 Map 中显示已被占用，直接跳过，避免不必要的数据库写开销
 		if priceMap[p] {
 			continue
 		}
 
-		// 内存中显示空闲，尝试将其插入数据库
+		// 第二层防护：内存检测空闲，尝试将其写入 tmp_price 表
 		newRecord := &model.TmpPrice{
 			Price: p,
 			Type:  payType,
 			Oid:   oid,
 		}
 
-		// 执行插入
+		// 执行插入（依赖数据库层面建立的唯一联合索引：uk_type_price）
 		insertErr := r.db.Create(&newRecord).Error
 
-		// 如果插入成功，说明我们成功占用了这个金额！直接返回。
+		// 插入成功，表示抢占金额槽位成功，立即返回该金额
 		if insertErr == nil {
 			return p
 		}
 
-		// 如果发生了错误，判断是否是唯一键冲突 (Duplicate Key)
-		// 这意味着就在我们刚查完 map 的那几毫秒内，另一个请求把这个金额抢占了
+		// 并发容错：若在查询之后插入之前的毫秒级间隙内被其他请求抢占，触发唯一索引冲突
 		if errors.Is(insertErr, gorm.ErrDuplicatedKey) {
-			// 发生并发冲突不要慌，让循环继续 (p--)，尝试下一个更小的金额
+			// 发生并发冲突，继续循环 (p++) 尝试下一个更高的金额
 			continue
 		}
 
-		// 如果是其他严重的数据库错误（如断网、字段超长等），立刻抛出中断
+		// 遇到数据库连接断开等非预期严重异常，中断并返回 0
 		return 0
 	}
 
-	// 5. 极端情况：如果这 100 个递减的价格（0.00 ~ 0.99 尾数）全都被占用了
+	// 5. 熔断降级：若该通道在 99 分钱的递增区间内 100 个槽位全被占满，返回 0 提示系统繁忙
 	return 0
 }
