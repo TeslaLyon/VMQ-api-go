@@ -164,41 +164,11 @@ func (s *monitorAndroidService) ProcessMonitorPush(req *model.MonitorPushRequest
 			log.Printf("订单支付成功: 订单ID=%s, 用户ID=%d, 价格=%d，准备回调商户: %s", order.Order_id, user.ID, price, finalNotifyURL)
 
 			// 🌟 核心：使用独立 Goroutine 异步向商户发送回调通知，避免阻塞监控端请求
-			// 异步发起通知
-			go func(targetURL string, orderID string, appKey string, appSecret string) {
-				client := &http.Client{Timeout: 5 * time.Second}
-				req, reqErr := http.NewRequest(http.MethodGet, targetURL, nil)
-				if reqErr != nil {
-					log.Printf("[异步回调异常] 订单ID=%s, 创建请求失败: %v", orderID, reqErr)
-					return
-				}
-
-				// 基础环境标识
-				req.Header.Set("User-Agent", "VMQ-Monitor-Notifier/1.0")
-
-				// 🌟 核心：计算并批量装配认证 Header
-				headers := buildSignedHeaders(appKey, appSecret)
-				for k, v := range headers {
-					req.Header.Set(k, v)
-				}
-
-				// 发起请求
-				resp, doErr := client.Do(req)
-				if doErr != nil {
-					log.Printf("[异步回调失败] 订单ID=%s, 请求错误: %v", orderID, doErr)
-					return
-				}
-				defer resp.Body.Close()
-
-				bodyBytes, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
-				responseContent := strings.TrimSpace(string(bodyBytes))
-
-				if resp.StatusCode == http.StatusOK && strings.EqualFold(responseContent, "success") {
-					log.Printf("[异步回调成功] 订单ID=%s, 商户返回 success", orderID)
-				} else {
-					log.Printf("[异步回调未确认] 订单ID=%s, HTTP=%d, Body=%s", orderID, resp.StatusCode, responseContent)
-				}
-			}(finalNotifyURL, order.Order_id, config.AppConfig.Server.OpenapiKey, config.AppConfig.Server.OpenapiValue) // 🌟 传入凭据
+			// 异步发起通知，支持重试并在未确认成功时触发 Bark 告警
+			orderCopy := *order
+			go func(ord model.Order, targetURL string, appKey string, appSecret string) {
+				sendMerchantCallbackWithRetry(&ord, targetURL, appKey, appSecret)
+			}(orderCopy, finalNotifyURL, config.AppConfig.Server.OpenapiKey, config.AppConfig.Server.OpenapiValue) // 🌟 传入凭据
 			log.Printf("订单支付成功: 订单ID=%s, 用户ID=%d, 价格=%d", order.Order_id, user.ID, price)
 		}
 	}
@@ -298,3 +268,88 @@ func buildSignedHeaders(appKey, appSecret string) map[string]string {
 		"X-Signature": signature,
 	}
 }
+
+var (
+	callbackHTTPClient    = &http.Client{Timeout: 5 * time.Second}
+	callbackRetryInterval = 2 * time.Second
+)
+
+const maxCallbackRetries = 3
+
+// sendMerchantCallbackWithRetry 向商户异步推送支付回调通知，支持失败重试并触发 Bark 告警
+func sendMerchantCallbackWithRetry(order *model.Order, targetURL string, appKey string, appSecret string) {
+	if order == nil {
+		return
+	}
+
+	var lastReason string
+	success := false
+
+	for attempt := 1; attempt <= maxCallbackRetries; attempt++ {
+		req, reqErr := http.NewRequest(http.MethodGet, targetURL, nil)
+		if reqErr != nil {
+			lastReason = fmt.Sprintf("创建请求失败: %v", reqErr)
+			log.Printf("[异步回调异常] 订单ID=%s, 第 %d/%d 次, 创建请求失败: %v", order.Order_id, attempt, maxCallbackRetries, reqErr)
+			break // URL 格式有误等不可恢复错误，不继续重试
+		}
+
+		// 基础环境标识
+		req.Header.Set("User-Agent", "VMQ-Monitor-Notifier/1.0")
+
+		// 🌟 核心：计算并批量装配认证 Header
+		headers := buildSignedHeaders(appKey, appSecret)
+		for k, v := range headers {
+			req.Header.Set(k, v)
+		}
+
+		// 发起请求
+		resp, doErr := callbackHTTPClient.Do(req)
+		if doErr != nil {
+			lastReason = fmt.Sprintf("请求错误: %v", doErr)
+			log.Printf("[异步回调失败] 订单ID=%s, 第 %d/%d 次, 请求错误: %v", order.Order_id, attempt, maxCallbackRetries, doErr)
+		} else {
+			bodyBytes, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
+			resp.Body.Close()
+			responseContent := strings.TrimSpace(string(bodyBytes))
+
+			if resp.StatusCode == http.StatusOK && strings.EqualFold(responseContent, "success") {
+				if attempt == 1 {
+					log.Printf("[异步回调成功] 订单ID=%s, 商户返回 success", order.Order_id)
+				} else {
+					log.Printf("[异步回调成功] 订单ID=%s, 商户返回 success (第 %d 次重试成功)", order.Order_id, attempt)
+				}
+				success = true
+				break
+			}
+
+			if resp.StatusCode != http.StatusOK {
+				statusText := http.StatusText(resp.StatusCode)
+				if statusText != "" {
+					lastReason = fmt.Sprintf("HTTP %d %s", resp.StatusCode, statusText)
+				} else {
+					lastReason = fmt.Sprintf("HTTP %d", resp.StatusCode)
+				}
+			} else {
+				displayBody := responseContent
+				if len(displayBody) > 60 {
+					displayBody = displayBody[:60] + "..."
+				}
+				lastReason = fmt.Sprintf("商户未返回 success (HTTP %d, Body=%s)", resp.StatusCode, displayBody)
+			}
+			log.Printf("[异步回调未确认] 订单ID=%s, 第 %d/%d 次, HTTP=%d, Body=%s", order.Order_id, attempt, maxCallbackRetries, resp.StatusCode, responseContent)
+		}
+
+		if attempt < maxCallbackRetries {
+			time.Sleep(callbackRetryInterval)
+		}
+	}
+
+	if !success {
+		failureReason := fmt.Sprintf("%s (重试 %d 次均失败)", lastReason, maxCallbackRetries)
+		log.Printf("[异步回调失败告警] 订单ID=%s, 回调未确认成功, 触发 Bark 告警", order.Order_id)
+		if err := SendOrderCallbackFailedAlert(order, failureReason); err != nil {
+			log.Printf("[Bark告警发送失败] 订单ID=%s, 错误: %v", order.Order_id, err)
+		}
+	}
+}
+

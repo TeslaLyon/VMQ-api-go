@@ -42,3 +42,7 @@ log:
   max_age: 30
   max_backups: 10
   compress: true 
+
+bark:
+  server: "https://api.day.app"
+  key: "45645645646456"

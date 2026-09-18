@@ -13,6 +13,12 @@ type Config struct {
 	JWT      JWTConfig      `mapstructure:"jwt"`
 	Redis    RedisConfig    `mapstructure:"redis"`
 	Log      LogConfig      `mapstructure:"log"`
+	Bark     BarkConfig     `mapstructure:"bark"`
+}
+
+type BarkConfig struct {
+	Server string `mapstructure:"server"`
+	Key    string `mapstructure:"key"`
 }
 
 type ServerConfig struct {
@@ -125,4 +131,8 @@ func setDefaults() {
 	viper.SetDefault("log.max_age", 30)
 	viper.SetDefault("log.max_backups", 10)
 	viper.SetDefault("log.compress", true)
+
+	// Bark defaults
+	viper.SetDefault("bark.server", "https://api.day.app")
+	viper.SetDefault("bark.key", "34353453435435345")
 }
