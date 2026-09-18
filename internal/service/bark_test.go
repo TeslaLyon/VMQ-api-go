@@ -134,7 +134,7 @@ func TestSendOrderCallbackFailedAlert(t *testing.T) {
 		Really_price: 8800,
 	}
 
-	err := SendOrderCallbackFailedAlert(order, "HTTP 504 Gateway Timeout (重试 3 次均失败)")
+	err := SendOrderCallbackFailedAlert(order, "HTTP 504 Gateway Timeout (重试 3 次均失败)", "Gateway Timeout")
 	if err != nil {
 		t.Fatalf("SendOrderCallbackFailedAlert failed: %v", err)
 	}
@@ -147,6 +147,9 @@ func TestSendOrderCallbackFailedAlert(t *testing.T) {
 	}
 	if !strings.Contains(receivedMsg.Body, "【失败原因】HTTP 504 Gateway Timeout (重试 3 次均失败)") {
 		t.Errorf("body does not contain failure reason, got: %s", receivedMsg.Body)
+	}
+	if !strings.Contains(receivedMsg.Body, "【返回内容】Gateway Timeout") {
+		t.Errorf("body does not contain return body, got: %s", receivedMsg.Body)
 	}
 	if receivedMsg.Copy != "ORD20260916001" {
 		t.Errorf("expected copy ORD20260916001, got %s", receivedMsg.Copy)
@@ -205,17 +208,21 @@ func TestSendMerchantCallbackWithRetry_Success(t *testing.T) {
 
 	order := &model.Order{
 		Order_id:     "ORD_SUCCESS_001",
+		State:        model.OrderStatusPaid,
 		Type:         model.OrderTypeAlipay,
 		Really_price: 1000,
 	}
 
-	sendMerchantCallbackWithRetry(order, "https://merchant.example.com/callback", "testKey", "testSecret")
+	sendMerchantCallbackWithRetry(order, "https://merchant.example.com/callback", "testKey", "testSecret", nil)
 
 	if atomic.LoadInt32(&attempts) != 1 {
 		t.Errorf("expected 1 merchant attempt, got %d", atomic.LoadInt32(&attempts))
 	}
 	if atomic.LoadInt32(&barkCalls) != 0 {
 		t.Errorf("expected 0 bark alerts on success, got %d", atomic.LoadInt32(&barkCalls))
+	}
+	if order.State != model.OrderStatusPaid {
+		t.Errorf("expected order state to remain OrderStatusPaid, got: %d", order.State)
 	}
 }
 
@@ -274,12 +281,13 @@ func TestSendMerchantCallbackWithRetry_FailureTriggersBark(t *testing.T) {
 
 	order := &model.Order{
 		Order_id:     "ORD20260916001",
+		State:        model.OrderStatusPaid,
 		Type:         model.OrderTypeWechat,
 		Price:        8800,
 		Really_price: 8800,
 	}
 
-	sendMerchantCallbackWithRetry(order, "https://merchant.example.com/callback", "testKey", "testSecret")
+	sendMerchantCallbackWithRetry(order, "https://merchant.example.com/callback", "testKey", "testSecret", nil)
 
 	if atomic.LoadInt32(&attempts) != 3 {
 		t.Errorf("expected 3 retry attempts, got %d", atomic.LoadInt32(&attempts))
@@ -292,6 +300,12 @@ func TestSendMerchantCallbackWithRetry_FailureTriggersBark(t *testing.T) {
 	}
 	if !strings.Contains(receivedBarkMsg.Body, "【金额】¥88.00 (微信支付)") {
 		t.Errorf("bark alert body should contain amount and method, got: %s", receivedBarkMsg.Body)
+	}
+	if !strings.Contains(receivedBarkMsg.Body, "【返回内容】Gateway Timeout") {
+		t.Errorf("bark alert body should contain return body, got: %s", receivedBarkMsg.Body)
+	}
+	if order.State != model.OrderStatusNotifyFailed {
+		t.Errorf("expected order state to be OrderStatusNotifyFailed (2), got: %d", order.State)
 	}
 }
 
@@ -351,11 +365,12 @@ func TestSendMerchantCallbackWithRetry_RetrySucceeds(t *testing.T) {
 
 	order := &model.Order{
 		Order_id:     "ORD_RETRY_OK_001",
+		State:        model.OrderStatusPaid,
 		Type:         model.OrderTypeAlipay,
 		Really_price: 2000,
 	}
 
-	sendMerchantCallbackWithRetry(order, "https://merchant.example.com/callback", "testKey", "testSecret")
+	sendMerchantCallbackWithRetry(order, "https://merchant.example.com/callback", "testKey", "testSecret", nil)
 
 	if atomic.LoadInt32(&attempts) != 2 {
 		t.Errorf("expected 2 attempts before success, got %d", atomic.LoadInt32(&attempts))
@@ -363,5 +378,56 @@ func TestSendMerchantCallbackWithRetry_RetrySucceeds(t *testing.T) {
 	if atomic.LoadInt32(&barkCalls) != 0 {
 		t.Errorf("expected 0 bark alerts when retry succeeds, got %d", atomic.LoadInt32(&barkCalls))
 	}
+	if order.State != model.OrderStatusPaid {
+		t.Errorf("expected order state to remain OrderStatusPaid, got: %d", order.State)
+	}
 }
+
+// TestRealBarkNotify_WithRetry 直连真实 Bark 服务器，用于手动测试重试机制并让手机真实收到通知
+func TestRealBarkNotify_WithRetry(t *testing.T) {
+	// 加载真实配置
+	_ = config.LoadConfig("../../")
+
+	// 模拟一个持续返回 504 的商户服务
+	var attempts int32
+	mockMerchantClient := &http.Client{
+		Transport: &mockTransport{
+			roundTrip: func(req *http.Request) (*http.Response, error) {
+				atomic.AddInt32(&attempts, 1)
+				return &http.Response{
+					StatusCode: http.StatusGatewayTimeout,
+					Body:       io.NopCloser(bytes.NewBufferString("Gateway Timeout")),
+					Header:     make(http.Header),
+				}, nil
+			},
+		},
+	}
+
+	// 替换回调客户端与重试间隔（每次重试间隔 1 秒）
+	oldCallbackClient := callbackHTTPClient
+	oldInterval := callbackRetryInterval
+	defer func() {
+		callbackHTTPClient = oldCallbackClient
+		callbackRetryInterval = oldInterval
+	}()
+
+	callbackHTTPClient = mockMerchantClient
+	callbackRetryInterval = 1 * time.Second
+
+	// 保证 Bark 请求走系统真实网络（不 Mock）
+	barkHTTPClient = &http.Client{Timeout: 10 * time.Second}
+
+	order := &model.Order{
+		Order_id:     "ORD20260918001",
+		Pay_id:       "PAY20260918999",
+		Type:         model.OrderTypeWechat,
+		Price:        8800,
+		Really_price: 8800,
+	}
+
+	t.Logf(">>> 开始测试商户回调重试机制...")
+	sendMerchantCallbackWithRetry(order, "https://mock.merchant.com/notify", "testKey", "testSecret", nil)
+	t.Logf(">>> 回调重试结束，已向真实 Bark 发送告警，请查看手机！")
+}
+
 

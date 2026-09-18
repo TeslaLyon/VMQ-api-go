@@ -75,13 +75,9 @@ func (s *monitorAndroidService) ProcessMonitorHeart(req *model.MonitorHeartReque
 		return ErrInvalidSign
 	}
 
-	// 更新心跳时间和监控状态
+	// 仅精准更新心跳时间和监控状态（在线=1），避免整行全字段 UPDATE
 	now := time.Now().Unix()
-	jkstate := int16(1) // 假设1表示在线状态
-	user.Lastheart = &now
-	user.Jkstate = &jkstate
-
-	return s.userRepo.Update(user)
+	return s.userRepo.UpdateHeartbeat(user.ID, now, 1)
 }
 
 // ProcessMonitorPush 处理监控推送
@@ -167,16 +163,15 @@ func (s *monitorAndroidService) ProcessMonitorPush(req *model.MonitorPushRequest
 			// 异步发起通知，支持重试并在未确认成功时触发 Bark 告警
 			orderCopy := *order
 			go func(ord model.Order, targetURL string, appKey string, appSecret string) {
-				sendMerchantCallbackWithRetry(&ord, targetURL, appKey, appSecret)
+				sendMerchantCallbackWithRetry(&ord, targetURL, appKey, appSecret, s.orderRepo)
 			}(orderCopy, finalNotifyURL, config.AppConfig.Server.OpenapiKey, config.AppConfig.Server.OpenapiValue) // 🌟 传入凭据
 			log.Printf("订单支付成功: 订单ID=%s, 用户ID=%d, 价格=%d", order.Order_id, user.ID, price)
 		}
 	}
 
-	// 更新最后支付时间
+	// 仅精准更新最后支付时间，避免整行全字段 UPDATE
 	now := time.Now().Unix()
-	user.Lastpay = &now
-	return s.userRepo.Update(user)
+	return s.userRepo.UpdateLastPay(user.ID, now)
 }
 
 func getAppSecretByKey(appKey string) string {
@@ -205,19 +200,15 @@ func (s *monitorAndroidService) CheckAndUpdateMonitorStatus() error {
 
 		for _, user := range users {
 			if user.Lastheart == nil || *user.Lastheart == 0 {
-				// 没有心跳记录，设置为掉线状态
-				jkstate := int16(0)
-				user.Jkstate = &jkstate
-				s.userRepo.Update(user)
+				// 没有心跳记录，精准更新为掉线状态(0)
+				_ = s.userRepo.UpdateJkstate(user.ID, 0)
 				continue
 			}
 
 			// 检查心跳是否超时
 			if currentTime-*user.Lastheart >= heartbeatTimeout {
-				// 心跳超时，设置为掉线状态
-				jkstate := int16(0)
-				user.Jkstate = &jkstate
-				s.userRepo.Update(user)
+				// 心跳超时，精准更新为掉线状态(0)
+				_ = s.userRepo.UpdateJkstate(user.ID, 0)
 			}
 			// 如果心跳正常，不需要更新，因为心跳接口会自动设置为1
 		}
@@ -276,13 +267,14 @@ var (
 
 const maxCallbackRetries = 3
 
-// sendMerchantCallbackWithRetry 向商户异步推送支付回调通知，支持失败重试并触发 Bark 告警
-func sendMerchantCallbackWithRetry(order *model.Order, targetURL string, appKey string, appSecret string) {
+// sendMerchantCallbackWithRetry 向商户异步推送支付回调通知，支持失败重试并在失败后更新订单状态为 OrderStatusNotifyFailed 及触发 Bark 告警
+func sendMerchantCallbackWithRetry(order *model.Order, targetURL string, appKey string, appSecret string, orderRepo repository.OrderRepository) {
 	if order == nil {
 		return
 	}
 
 	var lastReason string
+	var lastResponseBody string
 	success := false
 
 	for attempt := 1; attempt <= maxCallbackRetries; attempt++ {
@@ -306,11 +298,13 @@ func sendMerchantCallbackWithRetry(order *model.Order, targetURL string, appKey 
 		resp, doErr := callbackHTTPClient.Do(req)
 		if doErr != nil {
 			lastReason = fmt.Sprintf("请求错误: %v", doErr)
+			lastResponseBody = ""
 			log.Printf("[异步回调失败] 订单ID=%s, 第 %d/%d 次, 请求错误: %v", order.Order_id, attempt, maxCallbackRetries, doErr)
 		} else {
 			bodyBytes, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
 			resp.Body.Close()
 			responseContent := strings.TrimSpace(string(bodyBytes))
+			lastResponseBody = responseContent
 
 			if resp.StatusCode == http.StatusOK && strings.EqualFold(responseContent, "success") {
 				if attempt == 1 {
@@ -345,11 +339,21 @@ func sendMerchantCallbackWithRetry(order *model.Order, targetURL string, appKey 
 	}
 
 	if !success {
+		// 1. 修改订单状态为 OrderStatusNotifyFailed (2) 并入库持久化
+		order.State = model.OrderStatusNotifyFailed
+		if orderRepo != nil {
+			if err := orderRepo.Update(order); err != nil {
+				log.Printf("[更新订单状态失败] 订单ID=%s, 状态更新为通知失败失败: %v", order.Order_id, err)
+			} else {
+				log.Printf("[订单状态已更新] 订单ID=%s, 异步回调未确认成功, 状态已修改为 OrderStatusNotifyFailed (2)", order.Order_id)
+			}
+		}
+
+		// 2. 发送 Bark 告警，带上失败原因以及商户错误返回 Body
 		failureReason := fmt.Sprintf("%s (重试 %d 次均失败)", lastReason, maxCallbackRetries)
 		log.Printf("[异步回调失败告警] 订单ID=%s, 回调未确认成功, 触发 Bark 告警", order.Order_id)
-		if err := SendOrderCallbackFailedAlert(order, failureReason); err != nil {
+		if err := SendOrderCallbackFailedAlert(order, failureReason, lastResponseBody); err != nil {
 			log.Printf("[Bark告警发送失败] 订单ID=%s, 错误: %v", order.Order_id, err)
 		}
 	}
 }
-

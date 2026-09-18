@@ -76,7 +76,9 @@ var AppConfig *Config
 func LoadConfig(configPath string) error {
 	viper.SetConfigName("config")
 	viper.SetConfigType("yaml")
-	viper.AddConfigPath(".")
+	if configPath != "" {
+		viper.AddConfigPath(configPath)
+	}
 	viper.AddConfigPath(".")
 
 	// 设置默认值

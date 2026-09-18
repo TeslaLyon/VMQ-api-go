@@ -434,7 +434,7 @@ func (s *orderService) GenerateReturnURL(orderID string) (string, error) {
 	}
 
 	// 检查订单是否已支付
-	if order.State != model.OrderStatusPaid {
+	if !order.IsPaid() {
 		return "", fmt.Errorf("订单未支付，无法生成返回URL")
 	}
 

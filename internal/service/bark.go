@@ -93,7 +93,7 @@ func SendBarkNotification(msg *BarkMessage) error {
 }
 
 // SendOrderCallbackFailedAlert 当异步回调失败时构造告警并发送 Bark 通知
-func SendOrderCallbackFailedAlert(order *model.Order, failureReason string) error {
+func SendOrderCallbackFailedAlert(order *model.Order, failureReason string, responseBody string) error {
 	if order == nil {
 		return errors.New("order cannot be nil")
 	}
@@ -126,6 +126,19 @@ func SendOrderCallbackFailedAlert(order *model.Order, failureReason string) erro
 
 	bodyLines = append(bodyLines,
 		fmt.Sprintf("【失败原因】%s", failureReason),
+	)
+
+	trimmedBody := strings.TrimSpace(responseBody)
+	if trimmedBody != "" {
+		if len(trimmedBody) > 150 {
+			trimmedBody = trimmedBody[:150] + "..."
+		}
+		bodyLines = append(bodyLines, fmt.Sprintf("【返回内容】%s", trimmedBody))
+	} else {
+		bodyLines = append(bodyLines, "【返回内容】无响应内容 (连接超时/未返回 Body)")
+	}
+
+	bodyLines = append(bodyLines,
 		fmt.Sprintf("【通知时间】%s", time.Now().Format("2006-01-02 15:04:05")),
 	)
 

@@ -2,6 +2,7 @@ package repository
 
 import (
 	"VMQ-api-go/internal/model"
+	"time"
 
 	"gorm.io/gorm"
 )
@@ -21,6 +22,9 @@ type UserRepository interface {
 	ExistsByUserExcludeID(user string, excludeID uint) (bool, error)
 	ExistsByEmailExcludeID(email string, excludeID uint) (bool, error)
 	UpdatePasswordDirect(userID uint, hashedPassword string) error
+	UpdateHeartbeat(userID uint, lastheart int64, jkstate int16) error
+	UpdateLastPay(userID uint, lastpay int64) error
+	UpdateJkstate(userID uint, jkstate int16) error
 }
 
 // userRepository 用户仓库实现
@@ -145,4 +149,29 @@ func (r *userRepository) ExistsByEmailExcludeID(email string, excludeID uint) (b
 // UpdatePasswordDirect 直接更新用户密码（跳过BeforeUpdate钩子）
 func (r *userRepository) UpdatePasswordDirect(userID uint, hashedPassword string) error {
 	return r.db.Model(&model.User{}).Where("id = ?", userID).Update("pass", hashedPassword).Error
+}
+
+// UpdateHeartbeat 仅精准更新用户心跳时间和监控状态（高频心跳接口专用，避免全字段全表锁/整行UPDATE）
+func (r *userRepository) UpdateHeartbeat(userID uint, lastheart int64, jkstate int16) error {
+	return r.db.Model(&model.User{}).Where("id = ?", userID).Updates(map[string]interface{}{
+		"lastheart":  lastheart,
+		"jkstate":    jkstate,
+		"updated_at": time.Now().Unix(),
+	}).Error
+}
+
+// UpdateLastPay 仅更新最后支付时间
+func (r *userRepository) UpdateLastPay(userID uint, lastpay int64) error {
+	return r.db.Model(&model.User{}).Where("id = ?", userID).Updates(map[string]interface{}{
+		"lastpay":    lastpay,
+		"updated_at": time.Now().Unix(),
+	}).Error
+}
+
+// UpdateJkstate 仅更新监控端在线/掉线状态
+func (r *userRepository) UpdateJkstate(userID uint, jkstate int16) error {
+	return r.db.Model(&model.User{}).Where("id = ?", userID).Updates(map[string]interface{}{
+		"jkstate":    jkstate,
+		"updated_at": time.Now().Unix(),
+	}).Error
 }

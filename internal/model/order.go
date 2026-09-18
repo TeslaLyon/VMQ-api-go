@@ -71,9 +71,9 @@ func (o *Order) BeforeCreate(tx *gorm.DB) error {
 	return nil
 }
 
-// IsPaid 检查订单是否已支付
+// IsPaid 检查订单是否已支付（已支付或通知失败均代表用户已真实付款）
 func (o *Order) IsPaid() bool {
-	return o.State == OrderStatusPaid
+	return o.State == OrderStatusPaid || o.State == OrderStatusNotifyFailed
 }
 
 // IsClosed 检查订单是否已关闭
