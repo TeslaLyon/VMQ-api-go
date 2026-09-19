@@ -3,7 +3,7 @@ server:
   mode: "debug"  # debug, release, test
   read_timeout: "30s"
   write_timeout: "30s"
-  frontend_url: "http://localhost:3006"
+  frontend_url: "https://your-frontend-domain.com"
   admin_username: "admin"
   admin_password: "admin123"
   default_app_id: "vmq-cj"

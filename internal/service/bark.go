@@ -142,12 +142,12 @@ func SendOrderCallbackFailedAlert(order *model.Order, failureReason string, resp
 		fmt.Sprintf("【通知时间】%s", time.Now().Format("2006-01-02 15:04:05")),
 	)
 
-	// 管理端跳转链接
-	adminURL := "https://admin.example.com"
+	// 管理端跳转链接：从配置文件 server.frontend_url 中读取
+	var orderURL string
 	if config.AppConfig != nil && config.AppConfig.Server.FrontendURL != "" {
-		adminURL = strings.TrimRight(config.AppConfig.Server.FrontendURL, "/")
+		adminURL := strings.TrimRight(config.AppConfig.Server.FrontendURL, "/")
+		orderURL = fmt.Sprintf("%s/OrderList", adminURL)
 	}
-	orderURL := fmt.Sprintf("%s/order/%s", adminURL, order.Order_id)
 
 	msg := &BarkMessage{
 		Title: "⚠️ VMQ 异步回调失败告警",

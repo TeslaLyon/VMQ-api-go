@@ -154,8 +154,8 @@ func TestSendOrderCallbackFailedAlert(t *testing.T) {
 	if receivedMsg.Copy != "ORD20260916001" {
 		t.Errorf("expected copy ORD20260916001, got %s", receivedMsg.Copy)
 	}
-	if receivedMsg.URL != "https://admin.test.com/order/ORD20260916001" {
-		t.Errorf("expected URL https://admin.test.com/order/ORD20260916001, got %s", receivedMsg.URL)
+	if receivedMsg.URL != "https://admin.test.com/OrderList" {
+		t.Errorf("expected URL https://admin.test.com/OrderList, got %s", receivedMsg.URL)
 	}
 }
 
